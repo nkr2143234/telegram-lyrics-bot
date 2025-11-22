@@ -1,4 +1,4 @@
-pyTeleBotAPI==4.14.1
+pyTelegramBotAPI==4.14.1
 lyricsgenius==3.0.1
 requests==2.31.0
 deep-translator==1.11.4

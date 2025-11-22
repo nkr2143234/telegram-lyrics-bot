@@ -555,5 +555,13 @@ def handle_other_messages(message):
 
 
 if __name__ == "__main__":
-    print("Бот запущен с улучшенным поиском альбомов!")
-    bot.polling(none_stop=True)
+    print("Бот запущен с улучшенным поискoм альбомов!")
+    
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=60)
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        # Автоперезапуск через 10 секунд
+        import time, os
+        time.sleep(10)
+        os.execv(sys.executable, ['python'] + sys.argv)

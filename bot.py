@@ -6,7 +6,7 @@ import sys
 import os
 from deep_translator import GoogleTranslator
 
-TELEGRAM_TOKEN = "8329769044:AAFilq3rKfrJh8K7JWfH0k0MpWU2HhYLqZs"
+TELEGRAM_TOKEN = "8329769044:AAHAw93yYypcO8uCEW2hPvAByh9tsqR0Lgc"
 GENIUS_TOKEN = "vJ8UJ8v6gHC2YrshS-G1X2uJ5vXo_CVA25p94O13BBXowqMWK3q-s4nrEExs_Yiu"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)

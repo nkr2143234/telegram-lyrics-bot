@@ -334,6 +334,69 @@ def search_album_fallback(album_name):
         return {'success': False, 'error': str(e)}
 
 
+def search_song_improved(query):
+    """УЛУЧШЕННЫЙ ПОИСК ТРЕКОВ С ПРИОРИТЕТОМ РУССКОЙ МУЗЫКИ"""
+    try:
+        # Варианты поиска для русской музыки
+        search_variants = [
+            query,
+            f"{query} русский",
+            f"{query} russian",
+            f"{query} lyrics",
+            f"{query} текст"
+        ]
+        
+        best_song = None
+        best_score = 0
+        
+        for search_query in search_variants:
+            try:
+                song = genius.search_song(search_query)
+                if song:
+                    # Оцениваем релевантность
+                    score = 0
+                    query_words = query.lower().split()
+                    
+                    # Проверяем совпадение в названии
+                    title_lower = song.title.lower()
+                    for word in query_words:
+                        if word in title_lower:
+                            score += 3
+                    
+                    # Проверяем совпадение в имени артиста
+                    artist_lower = song.artist.lower()
+                    for word in query_words:
+                        if word in artist_lower:
+                            score += 2
+                    
+                    # Бонус за русские символы в результате
+                    if any(char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' for char in song.title.lower()):
+                        score += 1
+                    
+                    print(f"Найден трек: {song.title} - {song.artist} (очки: {score})")
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_song = song
+                        
+            except Exception as e:
+                print(f"Ошибка при поиске '{search_query}': {e}")
+                continue
+        
+        # Если нашли достаточно релевантный результат
+        if best_song and best_score >= 2:
+            return best_song
+        elif best_song:
+            print(f"Лучший результат имеет низкие очки: {best_score}")
+            return best_song
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Ошибка улучшенного поиска: {e}")
+        return None
+
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = """🎵 *Lyrics Finder Bot*
@@ -345,14 +408,26 @@ def send_welcome(message):
 • 📀 Просмотр треков альбома
 • 🇷🇺 Перевод текстов на русский
 
+*Совет:* Для лучшего поиска указывай "Исполнитель - Название песни"
+
 Выбери действие в меню ниже 👇"""
     bot.send_message(message.chat.id, welcome_text, parse_mode='Markdown', reply_markup=create_main_keyboard())
 
 
 @bot.message_handler(func=lambda message: message.text == '🎵 Поиск трека')
 def search_track_mode(message):
-    msg = bot.send_message(message.chat.id, "🔍 *Режим поиска трека*\n\nВведите название песни и исполнителя:",
-                           parse_mode='Markdown')
+    help_text = """🔍 *Режим поиска трека*
+
+Для лучших результатов используй формат:
+*Исполнитель - Название песни*
+
+*Примеры:*
+• Кино - Группа крови
+• Монеточка - Каждый раз
+• Rihanna - Diamonds
+
+Введите название:"""
+    msg = bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
     bot.register_next_step_handler(msg, process_track_search)
 
 
@@ -372,12 +447,8 @@ def process_track_search(message):
 
         bot.send_chat_action(message.chat.id, 'typing')
 
-        try:
-            song = genius.search_song(query)
-        except Exception as e:
-            print(f"Genius API error: {e}")
-            bot.send_message(message.chat.id, "❌ Ошибка доступа к Genius API. Попробуйте позже.")
-            return
+        # ИСПОЛЬЗУЕМ УЛУЧШЕННЫЙ ПОИСК
+        song = search_song_improved(query)
 
         if song:
             lyrics = clean_lyrics(song.lyrics)
@@ -394,7 +465,7 @@ def process_track_search(message):
             response = f"🎵 {song.title} - {song.artist}\n\n{lyrics}"
             bot.send_message(message.chat.id, response, reply_markup=create_translate_keyboard())
         else:
-            bot.send_message(message.chat.id, f"❌ Не найдено: \"{query}\"")
+            bot.send_message(message.chat.id, f"❌ Не найдено: \"{query}\"\n\nПопробуй уточнить запрос в формате *Исполнитель - Название*", parse_mode='Markdown')
 
     except Exception as e:
         bot.send_message(message.chat.id, f"😞 Ошибка: {str(e)}")
@@ -476,7 +547,8 @@ def handle_album_track(call):
             bot.send_chat_action(chat_id, 'typing')
 
             search_query = f"{track['title']} {track['artist']}"
-            song = genius.search_song(search_query)
+            # ИСПОЛЬЗУЕМ УЛУЧШЕННЫЙ ПОИСК ДЛЯ ТРЕКОВ ИЗ АЛЬБОМА
+            song = search_song_improved(search_query)
 
             if song:
                 lyrics = clean_lyrics(song.lyrics)

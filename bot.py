@@ -2,13 +2,32 @@ import telebot
 import lyricsgenius
 import requests
 import re
+import sys
+import os
 from deep_translator import GoogleTranslator
 
 TELEGRAM_TOKEN = "8329769044:AAFilq3rKfrJh8K7JWfH0k0MpWU2HhYLqZs"
 GENIUS_TOKEN = "vJ8UJ8v6gHC2YrshS-G1X2uJ5vXo_CVA25p94O13BBXowqMWK3q-s4nrEExs_Yiu"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+# НАСТРОЙКА GENIUS С ОБХОДОМ БЛОКИРОВКИ
 genius = lyricsgenius.Genius(GENIUS_TOKEN)
+genius.verbose = False
+genius.remove_section_headers = True
+genius.skip_non_songs = True
+genius.excluded_terms = ["(Remix)", "(Live)"]
+
+# ВАЖНЫЕ HEADERS ДЛЯ ОБХОДА 403 ОШИБКИ
+genius._session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Referer': 'https://genius.com/',
+})
+
 user_lyrics = {}
 user_albums = {}
 
@@ -212,9 +231,15 @@ def create_track_navigation(album_data, current_track_index, page):
 def search_album(album_name):
     """Поиск альбома по названию"""
     try:
+        # ДОБАВЛЕНЫ HEADERS ДЛЯ REQUESTS
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://genius.com/'
+        }
 
         search_url = f"https://genius.com/api/search/album?q={requests.utils.quote(album_name)}"
-        response = requests.get(search_url, timeout=10)
+        response = requests.get(search_url, timeout=10, headers=headers)
 
         if response.status_code == 200:
             data = response.json()
@@ -224,10 +249,9 @@ def search_album(album_name):
 
                 print(f"Найден альбом: {album_data['name']} - {album_data['artist']['name']}")
 
-
                 album_id = album_data['id']
                 tracks_url = f"https://genius.com/api/albums/{album_id}/tracks"
-                tracks_response = requests.get(tracks_url, timeout=10)
+                tracks_response = requests.get(tracks_url, timeout=10, headers=headers)
 
                 if tracks_response.status_code == 200:
                     tracks_data = tracks_response.json()
@@ -263,9 +287,15 @@ def search_album(album_name):
 def search_album_fallback(album_name):
     """Альтернативный поиск альбома через поиск песен"""
     try:
+        # ДОБАВЛЕНЫ HEADERS ДЛЯ REQUESTS
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://genius.com/'
+        }
 
         search_url = f"https://genius.com/api/search/song?q={requests.utils.quote(album_name)}"
-        response = requests.get(search_url, timeout=10)
+        response = requests.get(search_url, timeout=10, headers=headers)
 
         if response.status_code == 200:
             data = response.json()
@@ -286,13 +316,11 @@ def search_album_fallback(album_name):
                                 'tracks': []
                             }
 
-
                         albums[album_name]['tracks'].append({
                             'title': song_data['title'],
                             'artist': song_data['artist_names'],
                             'url': song_data['url']
                         })
-
 
                 if albums:
                     first_album = list(albums.values())[0]
@@ -344,7 +372,12 @@ def process_track_search(message):
 
         bot.send_chat_action(message.chat.id, 'typing')
 
-        song = genius.search_song(query)
+        try:
+            song = genius.search_song(query)
+        except Exception as e:
+            print(f"Genius API error: {e}")
+            bot.send_message(message.chat.id, "❌ Ошибка доступа к Genius API. Попробуйте позже.")
+            return
 
         if song:
             lyrics = clean_lyrics(song.lyrics)
@@ -376,9 +409,7 @@ def process_album_search(message):
 
         bot.send_chat_action(message.chat.id, 'typing')
 
-
         album_result = search_album(query)
-
 
         if not album_result['success']:
             bot.send_message(message.chat.id, "🔄 Пробую альтернативный поиск...")
@@ -388,12 +419,10 @@ def process_album_search(message):
 
             user_albums[message.chat.id] = album_result
 
-
             album_info = f"📀 *{album_result['title']}* - {album_result['artist']}"
             if album_result.get('release_date'):
                 album_info += f"\n📅 {album_result['release_date']}"
             album_info += f"\n🎵 {len(album_result['tracks'])} треков\n"
-
 
             bot.send_message(
                 message.chat.id,
@@ -446,13 +475,11 @@ def handle_album_track(call):
             bot.send_message(chat_id, f"🔍 Ищу текст: {track['title']}")
             bot.send_chat_action(chat_id, 'typing')
 
-
             search_query = f"{track['title']} {track['artist']}"
             song = genius.search_song(search_query)
 
             if song:
                 lyrics = clean_lyrics(song.lyrics)
-
 
                 user_lyrics[chat_id] = {
                     'lyrics': lyrics,
@@ -555,13 +582,13 @@ def handle_other_messages(message):
 
 
 if __name__ == "__main__":
-    print("Бот запущен с улучшенным поискoм альбомов!")
+    print("Бот запущен с улучшенным поиском альбомов!")
     
     try:
         bot.polling(none_stop=True, interval=0, timeout=60)
     except Exception as e:
         print(f"Ошибка: {e}")
         # Автоперезапуск через 10 секунд
-        import time, os
+        import time
         time.sleep(10)
         os.execv(sys.executable, ['python'] + sys.argv)

@@ -335,16 +335,27 @@ def search_album_fallback(album_name):
 
 
 def search_song_improved(query):
-    """УЛУЧШЕННЫЙ ПОИСК ТРЕКОВ С ПРИОРИТЕТОМ РУССКОЙ МУЗЫКИ"""
+    """УЛУЧШЕННЫЙ ПОИСК ТРЕКОВ С ПРАВИЛЬНЫМ ПРИОРИТЕТОМ"""
     try:
-        # Варианты поиска для русской музыки
-        search_variants = [
-            query,
-            f"{query} русский",
-            f"{query} russian",
-            f"{query} lyrics",
-            f"{query} текст"
-        ]
+        # Определяем язык запроса
+        has_russian_chars = any(char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' for char in query.lower())
+        
+        if has_russian_chars:
+            # Для русских запросов используем варианты с русским приоритетом
+            search_variants = [
+                query,
+                f"{query} русский",
+                f"{query} russian", 
+                f"{query} lyrics",
+                f"{query} текст"
+            ]
+        else:
+            # Для английских/международных запросов - только оригинальные варианты
+            search_variants = [
+                query,
+                f"{query} lyrics",
+                f"{query} official"
+            ]
         
         best_song = None
         best_score = 0
@@ -369,11 +380,16 @@ def search_song_improved(query):
                         if word in artist_lower:
                             score += 2
                     
-                    # Бонус за русские символы в результате
-                    if any(char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' for char in song.title.lower()):
-                        score += 1
+                    # Бонус за соответствие языка запроса и результата
+                    result_has_russian = any(char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' for char in title_lower)
+                    if has_russian_chars and result_has_russian:
+                        score += 2  # Русский запрос + русский результат
+                    elif not has_russian_chars and not result_has_russian:
+                        score += 2  # Английский запрос + английский результат
+                    else:
+                        score -= 1  # Разные языки - штраф
                     
-                    print(f"Найден трек: {song.title} - {song.artist} (очки: {score})")
+                    print(f"Найден трек: {song.title} - {song.artist} (очки: {score}, язык: {'ru' if result_has_russian else 'en'})")
                     
                     if score > best_score:
                         best_score = score
@@ -422,9 +438,10 @@ def search_track_mode(message):
 *Исполнитель - Название песни*
 
 *Примеры:*
-• Кино - Группа крови
-• Монеточка - Каждый раз
-• Rihanna - Diamonds
+• FRIENDLY THUG 52 NGG - No Gletcher Gang 2
+• CUPSIZE - дьявол!
+• ssspringvoid - Shadow Demon
+• Lil Peep - Benz Truck
 
 Введите название:"""
     msg = bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
@@ -463,6 +480,12 @@ def process_track_search(message):
                 lyrics = lyrics[:3500] + "..."
 
             response = f"🎵 {song.title} - {song.artist}\n\n{lyrics}"
+            
+            # Определяем язык результата для подсказки
+            has_russian = any(char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' for char in lyrics.lower())
+            if not has_russian:
+                response += "\n\n🇷🇺 *Доступен перевод на русский*"
+            
             bot.send_message(message.chat.id, response, reply_markup=create_translate_keyboard())
         else:
             bot.send_message(message.chat.id, f"❌ Не найдено: \"{query}\"\n\nПопробуй уточнить запрос в формате *Исполнитель - Название*", parse_mode='Markdown')
